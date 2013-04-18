@@ -8,17 +8,17 @@ knot
 
 public API
 ----------
-- `connect` connects to a network address.
-- `send` sends data bytes thru a connection.
-- `receive` receives data bytes from a connection.
-- `receive` receives data bytes from a http connection.
-- `close` closes an established connection.
-- `listen` creates a listening thread.
-- `sleep` puts a thread to sleep.
-- `reset_counters` reset transmission stats.
-- `get_bytes_received` get number of bytes received since last reset.
-- `get_bytes_sent` get number of bytes received since last reset.
-- `get_interface_address` get address of current interface address (requires an established connection)
+- `knot::connect()` connects to a network address.
+- `knot::send()` sends data bytes thru a connection.
+- `knot::receive()` receives data bytes from a connection.
+- `knot::receive()` receives data bytes from a http connection.
+- `knot::close()` closes an established connection.
+- `knot::listen()` creates a listening thread.
+- `knot::sleep()` puts a thread to sleep.
+- `knot::reset_counters()` reset transmission stats.
+- `knot::get_bytes_received()` get number of bytes received since last reset.
+- `knot::get_bytes_sent()` get number of bytes received since last reset.
+- `knot::get_interface_address()` get address of current interface address (requires an established connection)
 
 sample
 ------
@@ -46,9 +46,9 @@ int main( int argc, const char **argv )
 possible output
 ---------------
 <pre>
-D:\prj\knot&lt;cl sample.client.ntp.cc knot.cpp
-D:\prj\knot&lt;sample.client.ntp.exe
+D:\prj\knot&gt;cl sample.client.ntp.cc knot.cpp
+D:\prj\knot&gt;sample.client.ntp.exe
 answer from NTP server:
 56400 13-04-18 13:34:19 50 0 0  52.0 UTC(NIST) *
-D:\prj\knot&lt;
+D:\prj\knot&gt;
 </pre>
