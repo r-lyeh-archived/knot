@@ -3,7 +3,7 @@ knot
 
 - Knot is a lightweight and simple TCP network C++11 library with no dependencies.
 - Knot is tiny. One header and one source file.
-- Knot is cross-platform.
+- Knot is cross-platform. Compiles under MSVC/GCC. Works on Windows/Linux.
 - Knot is MIT licensed.
 
 public API
@@ -22,33 +22,37 @@ public API
 
 sample
 ------
-<pre>
-#include &lt;iostream&gt;
+```
+#include <iostream>
 #include "knot.hpp"
 
 int main( int argc, const char **argv )
 {
     int socket;
     std::string answer;
-    std::cout &lt;&lt; "answer from NTP server: ";
+    std::cout << "answer from NTP server: ";
 
     if( knot::connect( socket, "time-C.timefreq.bldrdoc.gov", "13" ) )
         if( knot::send( socket, "dummy" ) )
             if( knot::receive( socket, answer ) )
-                std::cout &lt;&lt; answer &lt;&lt; std::endl;
+                std::cout << answer << std::endl;
 
     knot::close( socket );
 
     return 0;
 }
-</pre>
+```
 
 possible output
 ---------------
-<pre>
-D:\prj\knot&gt;cl sample.client.ntp.cc knot.cpp
-D:\prj\knot&gt;sample.client.ntp.exe
+```
+D:\prj\knot>cl sample.client.ntp.cc knot.cpp
+D:\prj\knot>sample.client.ntp.exe
 answer from NTP server:
 56400 13-04-18 13:34:19 50 0 0  52.0 UTC(NIST) *
-D:\prj\knot&gt;
-</pre>
+D:\prj\knot>
+```
+
+special notes
+-------------
+- g++ users: both `-std=c++11` and `-lpthread` may be required when compiling `knot.cpp`

@@ -40,6 +40,7 @@
 #include <sstream>
 #include <iostream>
 #include <thread>
+#include <future>
 
 #ifdef _WIN32
 
@@ -50,22 +51,22 @@
 
 #   pragma comment(lib,"ws2_32.lib")
 
-#   define ACCEPT(a,b,c)          accept(a,b,c)
-#   define CONNECT(a,b,c)         connect(a,b,c)
-#   define CLOSE(a)               closesocket(a)
-#   define READ(a,b,c)            read(a,b,c)
-#   define RECV(a,b,c,d)          recv(a, (char *)b, c, d)
-#   define SELECT(a,b,c,d,e)      select(a,b,c,d,e)
-#   define SEND(a,b,c,d)          send(a, (const char *)b, (int)c, d)
-#   define WRITE(a,b,c)           write(a,b,c)
-#   define GETSOCKOPT(a,b,c,d,e)  getsockopt(a,b,c,(char *)d, (int *)e)
-#   define SETSOCKOPT(a,b,c,d,e)  setsockopt(a,b,c,(char *)d, (int)e)
+#   define ACCEPT(a,b,c)          ::accept(a,b,c)
+#   define CONNECT(a,b,c)         ::connect(a,b,c)
+#   define CLOSE(a)               ::closesocket(a)
+#   define READ(a,b,c)            ::read(a,b,c)
+#   define RECV(a,b,c,d)          ::recv(a, (char *)b, c, d)
+#   define SELECT(a,b,c,d,e)      ::select(a,b,c,d,e)
+#   define SEND(a,b,c,d)          ::send(a, (const char *)b, (int)c, d)
+#   define WRITE(a,b,c)           ::write(a,b,c)
+#   define GETSOCKOPT(a,b,c,d,e)  ::getsockopt(a,b,c,(char *)d, (int *)e)
+#   define SETSOCKOPT(a,b,c,d,e)  ::setsockopt(a,b,c,(char *)d, (int)e)
 
-#   define BIND(a,b,c)            bind(a,b,c)
-#   define LISTEN(a,b)            listen(a,b)
-#   define SHUTDOWN(a)            shutdown(a,2)
-#   define SHUTDOWN_R(a)          shutdown(a,0)
-#   define SHUTDOWN_W(a)          shutdown(a,1)
+#   define BIND(a,b,c)            ::bind(a,b,c)
+#   define LISTEN(a,b)            ::listen(a,b)
+#   define SHUTDOWN(a)            ::shutdown(a,2)
+#   define SHUTDOWN_R(a)          ::shutdown(a,0)
+#   define SHUTDOWN_W(a)          ::shutdown(a,1)
 
     namespace
     {
@@ -103,25 +104,26 @@
 #   include <sys/types.h>
 #   include <sys/socket.h>
 #   include <netdb.h>
+#   include <unistd.h>    //close
 
 #   include <arpa/inet.h> //inet_addr
 
-#   define ACCEPT(a,b,c)          accept(a,b,c)
-#   define CONNECT(a,b,c)         connect(a,b,c)
-#   define CLOSE(a)               close(a)
-#   define READ(a,b,c)            read(a,b,c)
-#   define RECV(a,b,c,d)          recv(a, (void *)b, c, d)
-#   define SELECT(a,b,c,d,e)      select(a,b,c,d,e)
-#   define SEND(a,b,c,d)          send(a, (const int8 *)b, c, d)
-#   define WRITE(a,b,c)           write(a,b,c)
-#   define GETSOCKOPT(a,b,c,d,e)  getsockopt((int)a,(int)b,(int)c,(void *)d,(socklen_t *)e)
-#   define SETSOCKOPT(a,b,c,d,e)  setsockopt((int)a,(int)b,(int)c,(const void *)d,(int)e)
+#   define ACCEPT(a,b,c)          ::accept(a,b,c)
+#   define CONNECT(a,b,c)         ::connect(a,b,c)
+#   define CLOSE(a)               ::close(a)
+#   define READ(a,b,c)            ::read(a,b,c)
+#   define RECV(a,b,c,d)          ::recv(a, (void *)b, c, d)
+#   define SELECT(a,b,c,d,e)      ::select(a,b,c,d,e)
+#   define SEND(a,b,c,d)          ::send(a, (const int8 *)b, c, d)
+#   define WRITE(a,b,c)           ::write(a,b,c)
+#   define GETSOCKOPT(a,b,c,d,e)  ::getsockopt((int)a,(int)b,(int)c,(void *)d,(socklen_t *)e)
+#   define SETSOCKOPT(a,b,c,d,e)  ::setsockopt((int)a,(int)b,(int)c,(const void *)d,(int)e)
 
-#   define BIND(a,b,c)            bind(a,b,c)
-#   define LISTEN(a,b)            listen(a,b)
-#   define SHUTDOWN(a)            shutdown(a,SHUT_RDWR)
-#   define SHUTDOWN_R(a)          shutdown(a,SHUT_RD)
-#   define SHUTDOWN_W(a)          shutdown(a,SHUT_WR)
+#   define BIND(a,b,c)            ::bind(a,b,c)
+#   define LISTEN(a,b)            ::listen(a,b)
+#   define SHUTDOWN(a)            ::shutdown(a,SHUT_RDWR)
+#   define SHUTDOWN_R(a)          ::shutdown(a,SHUT_RD)
+#   define SHUTDOWN_W(a)          ::shutdown(a,SHUT_WR)
 
 #endif
 
@@ -129,6 +131,10 @@
 
 namespace knot
 {
+    enum settings { 
+       threaded = false 
+    };
+
     namespace
     {
         volatile bool is_app_exiting = false;
@@ -239,52 +245,52 @@ namespace knot
             // [2] from unpv12e/lib/connect_nonb.c
             static bool connect_nonb( int sockfd, const sockaddr *saptr, socklen_t salen, double timeout_sec )
             {
-	            int				flags, n, error;
-	            socklen_t		len;
-	            fd_set			rset, wset;
-	            struct timeval	tval;
+                int             flags, n, error;
+                socklen_t       len;
+                fd_set          rset, wset;
+                struct timeval  tval;
 
-	            flags = fcntl(sockfd, F_GETFL, 0);
-	            fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+                flags = fcntl(sockfd, F_GETFL, 0);
+                fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 
-	            error = 0;
-	            if ( (n = ::connect(sockfd, (struct sockaddr *) saptr, salen)) < 0)
-		            if (errno != EINPROGRESS)
-			            return false;
+                error = 0;
+                if ( (n = ::connect(sockfd, (struct sockaddr *) saptr, salen)) < 0)
+                    if (errno != EINPROGRESS)
+                        return false;
 
-	            /* Do whatever we want while the connect is taking place. */
+                /* Do whatever we want while the connect is taking place. */
 
-	            if (n == 0)
-		            goto done;	/* connect completed immediately */
+                if (n == 0)
+                    goto done;  /* connect completed immediately */
 
-	                FD_ZERO(&rset);
-	                FD_SET(sockfd, &rset);
-	                wset = rset;
+                    FD_ZERO(&rset);
+                    FD_SET(sockfd, &rset);
+                    wset = rset;
                     tval = as_timeval( timeout_sec );
 
-	                if ( (n = ::select(sockfd+1, &rset, &wset, NULL,
-					                 timeout_sec > 0 ? &tval : NULL)) == 0) {
-                        ::CLOSE(sockfd);		/* timeout */
-		                errno = ETIMEDOUT;
-		                return false;
-	                }
+                    if ( (n = ::select(sockfd+1, &rset, &wset, NULL,
+                                     timeout_sec > 0 ? &tval : NULL)) == 0) {
+                        CLOSE(sockfd);      /* timeout */
+                        errno = ETIMEDOUT;
+                        return false;
+                    }
 
-	            if (FD_ISSET(sockfd, &rset) || FD_ISSET(sockfd, &wset)) {
-		            len = sizeof(error);
-		            if (::GETSOCKOPT(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) < 0)
-			            return false;			/* Solaris pending error */
-	            } else
-		            return false; //err_quit("select error: sockfd not set");
+                if (FD_ISSET(sockfd, &rset) || FD_ISSET(sockfd, &wset)) {
+                    len = sizeof(error);
+                    if (GETSOCKOPT(sockfd, SOL_SOCKET, SO_ERROR, &error, &len) < 0)
+                        return false;           /* Solaris pending error */
+                } else
+                    return false; //err_quit("select error: sockfd not set");
 
             done:
-	            fcntl(sockfd, F_SETFL, flags);	/* restore file status flags */
+                fcntl(sockfd, F_SETFL, flags);  /* restore file status flags */
 
-	            if (error) {
-		            ::CLOSE(sockfd);		/* just in case */
-		            errno = error;
-		            return false;
-	            }
-	            return true;
+                if (error) {
+                    CLOSE(sockfd);      /* just in case */
+                    errno = error;
+                    return false;
+                }
+                return true;
             }
         };
 
@@ -364,7 +370,7 @@ namespace knot
         }
         while( out.size() > 0 );
 
-        ::SHUTDOWN_W( sockfd );
+        SHUTDOWN_W( sockfd );
 
         return true;
     }
@@ -446,7 +452,7 @@ namespace knot
         if( sockfd < 0 )
             return true;
 
-        bool success = ( ::CLOSE( sockfd ) == 0 );
+        bool success = ( CLOSE( sockfd ) == 0 );
         sockfd = -1;
 
         return success;
@@ -473,15 +479,15 @@ namespace knot
         stSockAddr.sin_port = htons( port );
         stSockAddr.sin_addr.s_addr = INADDR_ANY;
 
-        if( ::BIND( fd, (struct sockaddr *)&stSockAddr, sizeof(stSockAddr) ) == -1 )
+        if( BIND( fd, (struct sockaddr *)&stSockAddr, sizeof(stSockAddr) ) == -1 )
         {
-            ::CLOSE(fd);
+            CLOSE(fd);
             return "error: bind failed", false;
         }
 
-        if( ::LISTEN( fd, backlog_queue ) == -1 )
+        if( LISTEN( fd, backlog_queue ) == -1 )
         {
-            ::CLOSE( fd );
+            CLOSE( fd );
             return "error: listen failed", false;
         }
 
@@ -497,13 +503,13 @@ namespace knot
                     int client_len = sizeof(client_addr);
                     memset( &client_addr, 0, client_len );
 
-                    int child_fd = ::ACCEPT( master_fd, (struct sockaddr *)&client_addr, &client_len );
+                    int child_fd = ACCEPT( master_fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_len );
 
                     if( is_app_exiting )
                         return;
 
                     if( child_fd < 0 )
-                        continue; // ::CLOSE(master_fd) and return instead? die("accept() failed"); ?
+                        continue; // CLOSE(master_fd) and return instead? die("accept() failed"); ?
 
                     const char *client_addr_ip = inet_ntoa( client_addr.sin_addr );
                     std::string client_addr_port;
@@ -512,23 +518,21 @@ namespace knot
                     ss << ntohs( client_addr.sin_port );
                     ss >> client_addr_port;
 
-                    enum { threaded = false };
-
-                    if( threaded )
+                    if( settings::threaded )
                         std::thread( *callback, master_fd, child_fd, client_addr_ip, client_addr_port ).detach();
                     else
                         (*callback)( master_fd, child_fd, client_addr_ip, client_addr_port );
 
                     /* this should be done inside callback!
 
-                    if( ::SHUTDOWN( child_fd ) == -1 )
+                    if( SHUTDOWN( child_fd ) == -1 )
                     {
-                        ::CLOSE( child_fd );
+                        CLOSE( child_fd );
                         "error: cannot shutdown socket";
                         return;
                     }
 
-                    ::CLOSE( child_fd );
+                    CLOSE( child_fd );
 
                     */
                 }
@@ -537,14 +541,23 @@ namespace knot
 
         volatile bool ready = false;
 
-        std::thread( &worker::job, &ready, fd, callback ).detach();
+        // 2013.04.30.17:49 @r-lyeh says: My Ubuntu Linux setup passes this C++11
+        // block *only* when -lpthread is specified at linking stage. Go figure {
+        try {
+            std::thread( &worker::job, &ready, fd, callback ).detach();
+        }
+        catch(...) {
+            CLOSE( fd );
+            return "cannot launch listening thread. forgot -lpthread?", false;
+        }
+        // }
 
         while( !ready )
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
         listening_ports.insert( _port );
 
-        return true;
+        return true;            
     }
 
     // stats
