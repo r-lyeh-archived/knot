@@ -131,8 +131,8 @@
 
 namespace knot
 {
-    enum settings { 
-       threaded = false 
+    enum settings {
+       threaded = true
     };
 
     namespace
@@ -497,67 +497,73 @@ namespace knot
             {
                 *ready = true;
 
-                while( !is_app_exiting )
-                {
-                    struct sockaddr_in client_addr;
-                    int client_len = sizeof(client_addr);
-                    memset( &client_addr, 0, client_len );
+                try {
 
-                    int child_fd = ACCEPT( master_fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_len );
-
-                    if( is_app_exiting )
-                        return;
-
-                    if( child_fd < 0 )
-                        continue; // CLOSE(master_fd) and return instead? die("accept() failed"); ?
-
-                    const char *client_addr_ip = inet_ntoa( client_addr.sin_addr );
-                    std::string client_addr_port;
-
-                    std::stringstream ss;
-                    ss << ntohs( client_addr.sin_port );
-                    ss >> client_addr_port;
-
-                    if( settings::threaded )
-                        std::thread( *callback, master_fd, child_fd, client_addr_ip, client_addr_port ).detach();
-                    else
-                        (*callback)( master_fd, child_fd, client_addr_ip, client_addr_port );
-
-                    /* this should be done inside callback!
-
-                    if( SHUTDOWN( child_fd ) == -1 )
+                    while( !is_app_exiting )
                     {
+                        struct sockaddr_in client_addr;
+                        int client_len = sizeof(client_addr);
+                        memset( &client_addr, 0, client_len );
+
+                        int child_fd = ACCEPT( master_fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_len );
+
+                        if( is_app_exiting )
+                            return;
+
+                        if( child_fd < 0 )
+                            continue; // CLOSE(master_fd) and return instead? die("accept() failed"); ?
+
+                        const char *client_addr_ip = inet_ntoa( client_addr.sin_addr );
+                        std::string client_addr_port;
+
+                        std::stringstream ss;
+                        ss << ntohs( client_addr.sin_port );
+                        ss >> client_addr_port;
+
+                        if( settings::threaded )
+                            std::thread( *callback, master_fd, child_fd, client_addr_ip, client_addr_port ).detach();
+                        else
+                            (*callback)( master_fd, child_fd, client_addr_ip, client_addr_port );
+
+                        /* this should be done inside callback!
+
+                        if( SHUTDOWN( child_fd ) == -1 )
+                        {
+                            CLOSE( child_fd );
+                            "error: cannot shutdown socket";
+                            return;
+                        }
+
                         CLOSE( child_fd );
-                        "error: cannot shutdown socket";
-                        return;
+
+                        */
                     }
+                }
+                catch(...) {
 
-                    CLOSE( child_fd );
-
-                    */
                 }
             }
         };
 
-        volatile bool ready = false;
-
         // 2013.04.30.17:49 @r-lyeh says: My Ubuntu Linux setup passes this C++11
         // block *only* when -lpthread is specified at linking stage. Go figure {
         try {
+            volatile bool ready = false;
+
             std::thread( &worker::job, &ready, fd, callback ).detach();
+
+            while( !ready )
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+
+            listening_ports.insert( _port );
+
+            return true;
         }
         catch(...) {
-            CLOSE( fd );
-            return "cannot launch listening thread. forgot -lpthread?", false;
         }
         // }
-
-        while( !ready )
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
-
-        listening_ports.insert( _port );
-
-        return true;            
+        CLOSE( fd );
+        return "cannot launch listening thread. forgot -lpthread?", false;
     }
 
     // stats
