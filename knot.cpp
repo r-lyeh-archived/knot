@@ -48,25 +48,26 @@
 
 #   include <winsock2.h>
 #   include <ws2tcpip.h>
+#   include <windows.h>
 
 #   pragma comment(lib,"ws2_32.lib")
 
-#   define ACCEPT(a,b,c)          ::accept(a,b,c)
-#   define CONNECT(a,b,c)         ::connect(a,b,c)
-#   define CLOSE(a)               ::closesocket(a)
-#   define READ(a,b,c)            ::read(a,b,c)
-#   define RECV(a,b,c,d)          ::recv(a, (char *)b, c, d)
-#   define SELECT(a,b,c,d,e)      ::select(a,b,c,d,e)
-#   define SEND(a,b,c,d)          ::send(a, (const char *)b, (int)c, d)
-#   define WRITE(a,b,c)           ::write(a,b,c)
-#   define GETSOCKOPT(a,b,c,d,e)  ::getsockopt(a,b,c,(char *)d, (int *)e)
-#   define SETSOCKOPT(a,b,c,d,e)  ::setsockopt(a,b,c,(char *)d, (int)e)
+#   define ACCEPT(A,B,C)             ::accept((A),(B),(C))
+#   define CONNECT(A,B,C)            ::connect((A),(B),(C))
+#   define CLOSE(A)                  ::closesocket((A))
+#   define READ(A,B,C)               ::read((A),(B),(C))
+#   define RECV(A,B,C,D)             ::recv((A), (char *)(B), (C), (D))
+#   define SELECT(A,B,C,D,E)         ::select((A),(B),(C),(D),(E))
+#   define SEND(A,B,C,D)             ::send((A), (const char *)(B), (int)(C), (D))
+#   define WRITE(A,B,C)              ::write((A),(B),(C))
+#   define GETSOCKOPT(A,B,C,D,E)     ::getsockopt((A),(B),(C),(char *)(D), (int*)(E))
+#   define SETSOCKOPT(A,B,C,D,E)     ::setsockopt((A),(B),(C),(char *)(D), (int )(E))
 
-#   define BIND(a,b,c)            ::bind(a,b,c)
-#   define LISTEN(a,b)            ::listen(a,b)
-#   define SHUTDOWN(a)            ::shutdown(a,2)
-#   define SHUTDOWN_R(a)          ::shutdown(a,0)
-#   define SHUTDOWN_W(a)          ::shutdown(a,1)
+#   define BIND(A,B,C)               ::bind((A),(B),(C))
+#   define LISTEN(A,B)               ::listen((A),(B))
+#   define SHUTDOWN(A)               ::shutdown((A),2)
+#   define SHUTDOWN_R(A)             ::shutdown((A),0)
+#   define SHUTDOWN_W(A)             ::shutdown((A),1)
 
     namespace
     {
@@ -108,22 +109,22 @@
 
 #   include <arpa/inet.h> //inet_addr
 
-#   define ACCEPT(a,b,c)          ::accept(a,b,c)
-#   define CONNECT(a,b,c)         ::connect(a,b,c)
-#   define CLOSE(a)               ::close(a)
-#   define READ(a,b,c)            ::read(a,b,c)
-#   define RECV(a,b,c,d)          ::recv(a, (void *)b, c, d)
-#   define SELECT(a,b,c,d,e)      ::select(a,b,c,d,e)
-#   define SEND(a,b,c,d)          ::send(a, (const int8 *)b, c, d)
-#   define WRITE(a,b,c)           ::write(a,b,c)
-#   define GETSOCKOPT(a,b,c,d,e)  ::getsockopt((int)a,(int)b,(int)c,(void *)d,(socklen_t *)e)
-#   define SETSOCKOPT(a,b,c,d,e)  ::setsockopt((int)a,(int)b,(int)c,(const void *)d,(int)e)
+#   define ACCEPT(A,B,C)             ::accept((A),(B),(C))
+#   define CONNECT(A,B,C)            ::connect((A),(B),(C))
+#   define CLOSE(A)                  ::close((A))
+#   define READ(A,B,C)               ::read((A),(B),(C))
+#   define RECV(A,B,C,D)             ::recv((A), (void *)(B), (C), (D))
+#   define SELECT(A,B,C,D,E)         ::select((A),(B),(C),(D),(E))
+#   define SEND(A,B,C,D)             ::send((A), (const int8 *)(B), (C), (D))
+#   define WRITE(A,B,C)              ::write((A),(B),(C))
+#   define GETSOCKOPT(A,B,C,D,E)     ::getsockopt((int)(A),(int)(B),(int)(C),(      void *)(D),(socklen_t *)(E))
+#   define SETSOCKOPT(A,B,C,D,E)     ::setsockopt((int)(A),(int)(B),(int)(C),(const void *)(D),(int)(E))
 
-#   define BIND(a,b,c)            ::bind(a,b,c)
-#   define LISTEN(a,b)            ::listen(a,b)
-#   define SHUTDOWN(a)            ::shutdown(a,SHUT_RDWR)
-#   define SHUTDOWN_R(a)          ::shutdown(a,SHUT_RD)
-#   define SHUTDOWN_W(a)          ::shutdown(a,SHUT_WR)
+#   define BIND(A,B,C)               ::bind((A),(B),(C))
+#   define LISTEN(A,B)               ::listen((A),(B))
+#   define SHUTDOWN(A)               ::shutdown((A),SHUT_RDWR)
+#   define SHUTDOWN_R(A)             ::shutdown((A),SHUT_RD)
+#   define SHUTDOWN_W(A)             ::shutdown((A),SHUT_WR)
 
 #endif
 
@@ -131,8 +132,8 @@
 
 namespace knot
 {
-    enum settings { 
-       threaded = false 
+    enum settings {
+       threaded = false
     };
 
     namespace
@@ -557,7 +558,7 @@ namespace knot
 
         listening_ports.insert( _port );
 
-        return true;            
+        return true;
     }
 
     // stats
