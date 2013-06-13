@@ -480,6 +480,14 @@ namespace knot
         stSockAddr.sin_port = htons( port );
         stSockAddr.sin_addr.s_addr = INADDR_ANY;
 
+#ifndef _WIN32
+        {
+            int yes = 1;
+            if ( SETSOCKOPT( fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int) ) == -1 )
+            {}
+        }
+#endif
+
         if( BIND( fd, (struct sockaddr *)&stSockAddr, sizeof(stSockAddr) ) == -1 )
         {
             CLOSE(fd);
