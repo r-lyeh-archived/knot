@@ -18,7 +18,7 @@ void echo_www( int master_fd, int child_fd, std::string client_addr_ip, std::str
     if( !knot::send( child_fd, "HTTP 200 OK\r\n\r\n" + input ) )
         die( "server error: cant send" );
 
-    if( !knot::close( child_fd ) )
+    if( !knot::disconnect( child_fd ) )
         die( "server error: cant close" );
 
     std::cout << "hit from " << client_addr_ip << ':' << client_addr_port << std::endl;
@@ -35,6 +35,8 @@ int main( int argc, const char **argv )
 
     for(;;)
         knot::sleep( 1.0 );
+
+    knot::shutdown();
 
     return 0;
 }

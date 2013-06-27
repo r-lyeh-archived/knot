@@ -28,21 +28,20 @@
  * - rlyeh ~~ listening to Crippled Black Phoenix / We Forgotten Who We Are
  */
 
-#include "knot.hpp"
-
 #include <errno.h>
 #include <memory.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <memory>
-#include <string>
-#include <sstream>
-#include <iostream>
-#include <thread>
 #include <future>
+#include <iostream>
+#include <memory>
+#include <map>
+#include <sstream>
+#include <string>
+#include <thread>
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
 
 #   include <cassert>
 
@@ -99,6 +98,9 @@
         }
     }
 
+#   define $windows $yes
+#   define $welse   $no
+
 #else
 
 #   include <fcntl.h>
@@ -126,9 +128,15 @@
 #   define SHUTDOWN_R(A)             ::shutdown((A),SHUT_RD)
 #   define SHUTDOWN_W(A)             ::shutdown((A),SHUT_WR)
 
+#   define $windows $no
+#   define $welse   $yes
+
 #endif
 
-#include <set>
+#define $yes(...) __VA_ARGS__
+#define $no(...)
+
+#include "knot.hpp"
 
 namespace knot
 {
@@ -138,43 +146,26 @@ namespace knot
 
     namespace
     {
-        volatile bool is_app_exiting = false;
-        std::set<std::string> listening_ports;
+        struct control_t {
+            int master_fd;
+            std::string port;
+            volatile bool ready;
+            volatile bool exiting;
+            volatile bool finished;
+            void (*callback)( int master_fd, int child_fd, std::string client_addr_ip, std::string client_addr_port );
+        };
 
-        void exiting()
-        {
-            is_app_exiting = true;
+        std::map<int,control_t *> listeners;
 
-            for( std::set<std::string>::iterator it = listening_ports.begin(), end = listening_ports.end(); it != end; ++it )
-            {
-                fprintf( stdout, "<knot/knot.cpp> says: listening port %s is about to close", it->c_str() );
-
-                // dummy request
-                int dummyfd;
-                knot::connect( dummyfd, "127.0.0.1", *it );
+        $windows(
+        struct initialize_winsock {
+            initialize_winsock() {
+                WSADATA wsa_data;
+                int result = WSAStartup( MAKEWORD(2, 2), &wsa_data );
+                bool failed = ( result != 0 );
             }
-        }
-
-        bool startup()
-        {
-#           ifdef _WIN32
-                WSADATA wsaData;
-                // Initialize Winsock
-                int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-                if( iResult != 0 )
-                {
-                    printf( "WSAStartup failed: %d\n", iResult);
-                    assert(!"WSAStartup failed!" );
-                    return false;
-                }
-#           endif
-
-            atexit( exiting );
-
-            return true;
-        }
-
-        const bool initialized = startup();
+        } startup;
+        )
     }
 
     namespace
@@ -214,8 +205,22 @@ namespace knot
             // if  tv = {n,m}, then select() waits up to n.m seconds
             // if  tv = {0,0}, then select() does polling
             // if &tv =  NULL, then select() waits forever
-            int n = ::select(sockfd+1, &fds, NULL, NULL, &tv);
-            return ( n == -1 ? sockfd = -1, TCP_ERROR : n == 0 ? TCP_TIMEOUT : TCP_OK );
+            int ret = ::select(sockfd+1, &fds, NULL, NULL, &tv);
+            return ( ret == -1 ? sockfd = -1, TCP_ERROR : ret == 0 ? TCP_TIMEOUT : TCP_OK );
+        }
+
+        int wait4data(int &sockfd, bool before_read, bool after_write, double timeout)
+        {
+            // set up the file descriptor set
+            fd_set fds;
+            FD_ZERO(&fds);
+            FD_SET(sockfd, &fds);
+
+            // set up the struct timeval for the timeout
+            timeval tv = as_timeval( timeout );
+
+            int ret = ::select(sockfd + 1, before_read ? &fds : NULL, after_write ? &fds : NULL, NULL, &tv);
+            return ( ret == -1 ? sockfd = -1, TCP_ERROR : ret == 0 ? TCP_TIMEOUT : TCP_OK );
         }
     }
 
@@ -225,7 +230,7 @@ namespace knot
     {
         timeval tv = as_timeval( seconds );
 
-#       ifdef _WIN32
+        $windows({
             SOCKET s = socket( PF_INET, SOCK_STREAM, IPPROTO_TCP );
 
             fd_set dummy;
@@ -234,9 +239,10 @@ namespace knot
 
             bool sucess = ( ::select(0, 0, 0, &dummy, &tv) == 0 );
             closesocket(s);
-#       else
+        })
+        $welse({
             int rv = ::select(0, 0, NULL, NULL, &tv);
-#       endif
+        })
     }
 
     bool connect( int &sockfd, const std::string &ip, const std::string &port, double timeout_sec )
@@ -255,9 +261,12 @@ namespace knot
                 fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 
                 error = 0;
-                if ( (n = ::connect(sockfd, (struct sockaddr *) saptr, salen)) < 0)
+                if ( (n = ::connect(sockfd, (struct sockaddr *) saptr, salen)) < 0) {
+/*                  if (errno != EINPROGRESS)
+						fprintf(stdout, "n: %d, errno: %s\n", n, strerror(errno)); */
                     if (errno != EINPROGRESS)
                         return false;
+				}
 
                 /* Do whatever we want while the connect is taking place. */
 
@@ -317,6 +326,15 @@ namespace knot
         return result;
     }
 
+    bool is_connected( int &sockfd, double timeout_sec )
+    {
+        if( sockfd < 0 )
+            return false;
+
+        char buff;
+        return ::recv(sockfd, &buff, 1, MSG_PEEK) != 0;
+    }
+
     bool get_interface_address( int &sockfd, std::string &ip, std::string &port )
     {
        ip = port = std::string();
@@ -359,6 +377,15 @@ namespace knot
 
             bytes_sent = ::send( sockfd, out.c_str(), out.size(), 0 );
 
+            /*
+            if error = EWOULDBLOCK {
+                wait4data( sockfd, false, true, timeout );
+                if( sock_fd < 0 )
+                    return false; // error
+                continue;
+            }
+            */
+
             if( bytes_sent == 0 )
                 return false;   // error! (?)
 
@@ -392,6 +419,12 @@ namespace knot
                     return false;    // error or timeout
 
             // todo timeout_sec -= dt.s()
+
+            /*
+                wait4data( sockfd, true, false, timeout_sec );
+                if( sock_fd < 0 )
+                    return false; // error
+            */
 
             std::string buffer( 4096, '\0' );
             int bytes_received = ::recv( sockfd, &buffer[0], buffer.size(), 0 );
@@ -448,7 +481,7 @@ namespace knot
         return true;
     }
 
-    bool close( int &sockfd, double timeout_sec )
+    bool disconnect( int &sockfd, double timeout_sec )
     {
         if( sockfd < 0 )
             return true;
@@ -463,8 +496,9 @@ namespace knot
     {
         unsigned port;
         {
-            std::stringstream ss( _port );
-            if( !(ss >> port) )
+            if( !(std::stringstream( _port ) >> port) )
+                return "error: invalid port number", false;
+            if( !port )
                 return "error: invalid port number", false;
         }
 
@@ -480,13 +514,11 @@ namespace knot
         stSockAddr.sin_port = htons( port );
         stSockAddr.sin_addr.s_addr = INADDR_ANY;
 
-#ifndef _WIN32
-        {
+        $welse({
             int yes = 1;
             if ( SETSOCKOPT( fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int) ) == -1 )
             {}
-        }
-#endif
+        })
 
         if( BIND( fd, (struct sockaddr *)&stSockAddr, sizeof(stSockAddr) ) == -1 )
         {
@@ -502,25 +534,25 @@ namespace knot
 
         struct worker
         {
-            static void job( volatile bool *ready, int master_fd, void (*callback)( int master_fd, int child_fd, std::string client_addr_ip, std::string client_addr_port ) )
+            static void job( control_t *control )
             {
-                *ready = true;
+                control->ready = true;
 
                 try {
 
-                    while( !is_app_exiting )
+                    while( !control->exiting )
                     {
                         struct sockaddr_in client_addr;
                         int client_len = sizeof(client_addr);
                         memset( &client_addr, 0, client_len );
 
-                        int child_fd = ACCEPT( master_fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_len );
+                        int child_fd = ACCEPT( control->master_fd, (struct sockaddr *)&client_addr, (socklen_t *)&client_len );
 
-                        if( is_app_exiting )
-                            return;
+                        if( control->exiting )
+                            break;
 
                         if( child_fd < 0 )
-                            continue; // CLOSE(master_fd) and return instead? die("accept() failed"); ?
+                            continue; // return instead? CLOSE(control->master_fd) && die("accept() failed"); ?
 
                         const char *client_addr_ip = inet_ntoa( client_addr.sin_addr );
                         std::string client_addr_port;
@@ -530,9 +562,9 @@ namespace knot
                         ss >> client_addr_port;
 
                         if( settings::threaded )
-                            std::thread( *callback, master_fd, child_fd, client_addr_ip, client_addr_port ).detach();
+                            std::thread( *control->callback, control->master_fd, child_fd, client_addr_ip, client_addr_port ).detach();
                         else
-                            (*callback)( master_fd, child_fd, client_addr_ip, client_addr_port );
+                            (*control->callback)( control->master_fd, child_fd, client_addr_ip, client_addr_port );
 
                         /* this should be done inside callback!
 
@@ -551,21 +583,28 @@ namespace knot
                 catch(...) {
 
                 }
+
+                control->finished = true;
             }
         };
 
         // 2013.04.30.17:49 @r-lyeh says: My Ubuntu Linux setup passes this C++11
         // block *only* when -lpthread is specified at linking stage. Go figure {
         try {
-            volatile bool ready = false;
+            control_t *c = new control_t();
+            c->ready = false;
+            c->exiting = false;
+            c->finished = false;
+            c->master_fd = fd;
+            c->callback = callback;
+            c->port = _port;
 
-            std::thread( &worker::job, &ready, fd, callback ).detach();
+            std::thread( &worker::job, c ).detach();
 
-            while( !ready )
+            while( !c->ready )
                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
 
-            listening_ports.insert( _port );
-
+            listeners[ fd ] = c;
             return true;
         }
         catch(...) {
@@ -573,6 +612,39 @@ namespace knot
         // }
         CLOSE( fd );
         return "cannot launch listening thread. forgot -lpthread?", false;
+    }
+
+    bool shutdown( int &sockfd ) {
+        if( sockfd < 0 )
+            return "invalid socket", false;
+
+        if( listeners.find(sockfd) == listeners.end() )
+            return "invalid socket", false;
+
+        auto *listener = listeners[ sockfd ];
+        listener->exiting = true;
+        while( !listener->finished ) {
+            CLOSE( sockfd );
+            int dummy_fd; // dummy request
+            knot::connect( dummy_fd, "localhost", listener->port, 0.25 );
+            knot::connect( dummy_fd, "127.0.0.1", listener->port, 0.25 );
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+
+        delete listener;
+        listeners.erase( listeners.find( sockfd ) );
+
+        sockfd = -1;
+        return true;
+    }
+
+    bool shutdown() {
+        bool ok = true;
+        while( listeners.size() ) {
+            int master_fd = listeners.begin()->second->master_fd;
+            ok &= knot::shutdown(master_fd);
+        }
+        return ok;
     }
 
     // stats
@@ -590,3 +662,26 @@ namespace knot
         // @todo: reset stats timers here
     }
 } // knot::
+
+#undef $no
+#undef $yes
+
+#undef $welse
+#undef $windows
+
+#undef SHUTDOWN_W
+#undef SHUTDOWN_R
+#undef SHUTDOWN
+#undef LISTEN
+#undef BIND
+
+#undef SETSOCKOPT
+#undef GETSOCKOPT
+#undef WRITE
+#undef SEND
+#undef SELECT
+#undef RECV
+#undef READ
+#undef CLOSE
+#undef CONNECT
+#undef ACCEPT

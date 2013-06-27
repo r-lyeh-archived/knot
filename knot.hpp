@@ -5,16 +5,19 @@ namespace knot
 {
     // api
     bool connect( int &sockfd, const std::string &ip, const std::string &port, double timeout_secs = 600 );
+    bool is_connected( int &sockfd, double timeout_secs = 600 );
     bool send( int &sockfd, const std::string &output, double timeout_secs = 600 );
     bool receive( int &sockfd, std::string &input, double timeout_secs = 600 );
     bool receive_www( int &sockfd, std::string &input, double timeout_secs = 600 );
-    bool close( int &sockfd, double timeout_secs = 600 );
+    bool disconnect( int &sockfd, double timeout_secs = 600 );
     void sleep( double secs );
 
     // api, server side
     bool listen( int &sockfd, const std::string &port, void (*delegate_callback)( int master_fd, int child_fd, std::string client_addr_ip, std::string client_addr_port ), unsigned backlog_queue = 1024 ); // @todo: if mask
+    bool shutdown( int &sockfd );
+    bool shutdown();
     // bool ban( ip/mask, true/false ); // @todo
-    // bool limit( ip/mask, downrate, uprate ); // @todo
+    // bool limit( ip/mask, instances_per_ip, downspeed, upspeed ); // @todo
 
     // stats
     size_t get_bytes_received();

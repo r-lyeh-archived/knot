@@ -18,7 +18,7 @@ void echo( int master_fd, int child_fd, std::string client_addr_ip, std::string 
     if( !knot::send( child_fd, input ) )
         die("server error: cant send");
 
-    if( !knot::close( child_fd ) )
+    if( !knot::disconnect( child_fd ) )
         die("server error: cant close");
 
     std::cout << "server says: hit from " << client_addr_ip << ':' << client_addr_port << std::endl;
@@ -47,10 +47,15 @@ int main( int argc, char **argv )
     if( !knot::receive( client_socket, answer ) )
         die("client error: cant receive");
 
-    if( !knot::close( client_socket ) )
+    if( !knot::disconnect( client_socket ) )
         die("client error: cant close");
 
     std::cout << "client says: answer='" << answer << "'" << std::endl;
+
+    // server
+
+    knot::shutdown( server_socket );
+    knot::shutdown();
 
     return 0;
 }

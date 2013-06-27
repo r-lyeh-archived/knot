@@ -12,7 +12,7 @@ int main( int argc, const char **argv )
             if( knot::receive( socket, answer ) )
                 std::cout << answer << std::endl;
 
-    knot::close( socket );
+    knot::disconnect( socket );
 
     return 0;
 }

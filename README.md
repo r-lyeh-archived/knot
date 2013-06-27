@@ -12,8 +12,9 @@ public API
 - `knot::send()` sends data bytes thru a connection.
 - `knot::receive()` receives data bytes from a connection.
 - `knot::receive()` receives data bytes from a http connection.
-- `knot::close()` closes an established connection.
+- `knot::disconnect()` closes an established connection.
 - `knot::listen()` creates a listening thread.
+- `knot::shutdown()` shutdowns a listening thread.
 - `knot::sleep()` puts a thread to sleep.
 - `knot::reset_counters()` reset transmission stats.
 - `knot::get_bytes_received()` get number of bytes received since last reset.
@@ -22,7 +23,7 @@ public API
 
 sample
 ------
-```
+```c++
 #include <iostream>
 #include "knot.hpp"
 
@@ -37,7 +38,7 @@ int main( int argc, const char **argv )
             if( knot::receive( socket, answer ) )
                 std::cout << answer << std::endl;
 
-    knot::close( socket );
+    knot::disconnect( socket );
 
     return 0;
 }

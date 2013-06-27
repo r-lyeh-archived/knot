@@ -11,7 +11,7 @@ int main( int argc, const char **argv )
             if( knot::receive( socket, answer ) )
                 std::cout << "ok, answer from google website: " << answer << std::endl;
 
-    knot::close( socket );
+    knot::disconnect( socket );
 
     return 0;
 }
