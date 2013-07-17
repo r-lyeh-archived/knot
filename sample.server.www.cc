@@ -28,7 +28,7 @@ int main( int argc, const char **argv )
 {
     int server_socket;
 
-    if( !knot::listen( server_socket, "8080", echo_www, 1024 ) )
+    if( !knot::listen( server_socket, "0.0.0.0", "8080", echo_www, 1024 ) )
         die( "server error: cant listen at port 8080" );
 
     std::cout << "server says: ready at port 8080" << std::endl;

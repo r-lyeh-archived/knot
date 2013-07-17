@@ -13,7 +13,7 @@ namespace knot
     void sleep( double secs );
 
     // api, server side
-    bool listen( int &sockfd, const std::string &port, void (*delegate_callback)( int master_fd, int child_fd, std::string client_addr_ip, std::string client_addr_port ), unsigned backlog_queue = 1024 ); // @todo: if mask
+    bool listen( int &sockfd, const std::string &bindip, const std::string &port, void (*delegate_callback)( int master_fd, int child_fd, std::string client_addr_ip, std::string client_addr_port ), unsigned backlog_queue = 1024 ); // @todo: if mask
     bool shutdown( int &sockfd );
     bool shutdown();
     // bool ban( ip/mask, true/false ); // @todo

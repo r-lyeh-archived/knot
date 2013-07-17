@@ -492,7 +492,7 @@ namespace knot
         return success;
     }
 
-    bool listen( int &fd, const std::string &_port, void (*callback)( int master_fd, int child_fd, std::string client_addr_ip, std::string client_addr_port ), unsigned backlog_queue )
+    bool listen( int &fd, const std::string &_bindip, const std::string &_port, void (*callback)( int master_fd, int child_fd, std::string client_addr_ip, std::string client_addr_port ), unsigned backlog_queue )
     {
         unsigned port;
         {
@@ -502,6 +502,8 @@ namespace knot
                 return "error: invalid port number", false;
         }
 
+        std::string bindip = ( _bindip.empty() ? std::string("0.0.0.0") : _bindip );
+
         struct sockaddr_in stSockAddr;
         fd = ::socket(PF_INET, SOCK_STREAM, IPPROTO_TCP);
 
@@ -510,9 +512,11 @@ namespace knot
 
         memset(&stSockAddr, 0, sizeof(stSockAddr));
 
+        inet_pton(AF_INET, bindip.c_str(), &(stSockAddr.sin_addr));
+
         stSockAddr.sin_family = AF_INET;
         stSockAddr.sin_port = htons( port );
-        stSockAddr.sin_addr.s_addr = INADDR_ANY;
+        //stSockAddr.sin_addr.s_addr = INADDR_ANY;
 
         $welse({
             int yes = 1;

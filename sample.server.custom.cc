@@ -30,7 +30,7 @@ int main( int argc, char **argv )
 
     int server_socket;
 
-    if( !knot::listen( server_socket, "8080", echo, 1024 ) )
+    if( !knot::listen( server_socket, "0.0.0.0", "8080", echo, 1024 ) )
         die("server error: cant listen at port 8080");
 
     // client
