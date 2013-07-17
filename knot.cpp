@@ -566,7 +566,7 @@ namespace knot
                         ss >> client_addr_port;
 
                         if( settings::threaded )
-                            std::thread( *control->callback, control->master_fd, child_fd, client_addr_ip, client_addr_port ).detach();
+                            std::thread( std::bind( *control->callback, control->master_fd, child_fd, client_addr_ip, client_addr_port ) ).detach();
                         else
                             (*control->callback)( control->master_fd, child_fd, client_addr_ip, client_addr_port );
 
