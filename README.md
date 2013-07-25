@@ -20,6 +20,7 @@ public API
 - `knot::get_bytes_received()` get number of bytes received since last reset.
 - `knot::get_bytes_sent()` get number of bytes received since last reset.
 - `knot::get_interface_address()` get address of current interface address (requires an established connection)
+- `knot::resolve()` get uri from url or host:port address.
 
 sample
 ------

@@ -33,10 +33,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <deque>
 #include <future>
 #include <iostream>
-#include <memory>
 #include <map>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <thread>
@@ -689,3 +690,245 @@ namespace knot
 #undef CLOSE
 #undef CONNECT
 #undef ACCEPT
+
+
+namespace knot {
+
+uri resolve( const std::string &addr, unsigned port )
+{
+#   ifdef _WIN32
+        static WSADATA wsaData;
+        static const int initilized = WSAStartup(MAKEWORD(2, 2), &wsaData);
+#   endif
+
+    uri out;
+
+    for( int i = 0; i < 6; ++i )
+        out.inet.ip[i] = 0;
+    out.inet.port = 0;
+
+    auto &inet = out.inet;
+    auto &pretty = out.pretty;
+
+    // @todo: replace deprecated gethostbyname()
+    struct hostent *h = gethostbyname( addr.c_str() );
+
+    if( h == NULL)
+        return out.ok = false, out;
+
+    if( port > 65536 || port == 0 )
+        return out.ok = false, out;
+
+    char ch;
+    std::stringstream ss( inet_ntoa(*((struct in_addr *)h->h_addr)) );
+    ss >> inet.ip[0] >> ch >> inet.ip[1] >> ch >> inet.ip[2] >> ch >> inet.ip[3];
+    inet.port = port;
+
+    switch( port )
+    {
+        break; case    7: pretty.protocol = "echo://";
+        break; case   13: pretty.protocol = "daytime://";
+        break; case   17: pretty.protocol = "qotd://";
+        break; case   20: pretty.protocol = "ftp-data://";
+        break; case   21: pretty.protocol = "ftp://";
+        break; case   22: pretty.protocol = "ssh://";
+        break; case   23: pretty.protocol = "telnet://";
+        break; case   25: pretty.protocol = "smtp://";
+        break; case   37: pretty.protocol = "time://";
+        break; case   53: pretty.protocol = "dns://";
+        break; case   69: pretty.protocol = "tftp://";
+        break; case   70: pretty.protocol = "gopher://";
+        break; case   79: pretty.protocol = "finger://";
+        break; case   80: pretty.protocol = "http://";
+        break; case  110: pretty.protocol = "pop://";
+        break; case  113: pretty.protocol = "ident://";
+        break; case  119: pretty.protocol = "nntp://";
+        break; case  123: pretty.protocol = "ntp://";
+        break; case  138: pretty.protocol = "netbios://";
+        break; case  143: pretty.protocol = "imap://";
+        break; case  161: pretty.protocol = "snmp://";
+        break; case  443: pretty.protocol = "https://";
+        break; case  465: pretty.protocol = "smtps://";
+        break; case  500: pretty.protocol = "ipsec://";
+        break; case  513: pretty.protocol = "rlogin://";
+        break; case  993: pretty.protocol = "imaps://";
+        break; case  995: pretty.protocol = "pops://";
+        break; case 1080: pretty.protocol = "socks://";
+        break; case 3306: pretty.protocol = "mysql://";
+        break; case 5000: pretty.protocol = "upnp://";
+        break; case 5222: pretty.protocol = "xmpp://";
+        break; case 5223: pretty.protocol = "xmpps://";
+        break; case 5269: pretty.protocol = "xmpp-server://";
+        break; case 6667: pretty.protocol = "irc://";
+        break; case 8080: pretty.protocol = "http://";
+
+        default: pretty.protocol = "";
+    }
+
+    pretty.hostname = h->h_name;
+    pretty.ip = ss.str();
+
+    std::stringstream ssp;
+    ssp << port;
+    pretty.port = ssp.str();
+    pretty.address = addr;
+
+    pretty.url = pretty.protocol + pretty.address + ':' + pretty.port;
+
+#if 0
+    std::cout << pretty.url << std::endl;
+    std::cout << pretty.protocol << std::endl;
+    std::cout << pretty.address << std::endl;
+    std::cout << pretty.hostname << std::endl;
+    std::cout << pretty.ip << std::endl;
+    std::cout << pretty.port << std::endl;
+
+    std::cout << inet.ip[0] << std::endl;
+    std::cout << inet.ip[1] << std::endl;
+    std::cout << inet.ip[2] << std::endl;
+    std::cout << inet.ip[3] << std::endl;
+    std::cout << inet.port << std::endl;
+#endif
+
+    return out.ok = true, out;
+}
+
+uri resolve( const std::string &addr, const std::string &port )
+{
+    unsigned p;
+    if( !(std::stringstream(port) >> p) ) {
+        uri u;
+        u.ok = false;
+        return u;
+    }
+    return resolve(addr,p);
+}
+
+namespace
+{
+    std::deque<std::string> split( const std::string &input, const std::string &delimiters ) {
+        std::string str;
+        std::deque<std::string> tokens;
+        for( auto &ch : input ) {
+            if( delimiters.find_first_of( ch ) == std::string::npos ) {
+                str += ch;
+            } else {
+                if( str.size() ) tokens.push_back( str ), str = "";
+                tokens.push_back( std::string() + ch );
+            }
+        }
+        return str.empty() ? tokens : tokens.push_back( str ), tokens;
+    }
+
+    std::string left_of( const std::string &input, const std::string &substring ) {
+        std::string::size_type pos = input.find( substring );
+        return pos == std::string::npos ? input : input.substr(0, pos);
+    }
+
+    typedef std::map<std::string,std::string> decomposed;
+
+    decomposed decompose( const std::string &full ) {
+
+        decomposed map;
+
+        map["full"] = full;
+        map["host"] = std::string();
+        map["port"] = std::string();
+        map["user"] = std::string();
+        map["pass"] = std::string();
+        map["proto"] = std::string();
+
+        std::deque<std::string> tokens = split(full, "/"); // http:, /, /, ..., /
+
+        if( tokens.size() >= 4 && left_of(tokens[0], ":").size() > 0 ) {
+            map["proto"] = tokens[0] + "//";
+
+            tokens.pop_front(); // http:
+            tokens.pop_front(); // /
+            tokens.pop_front(); // /
+        }
+
+        if( tokens.size() > 0 && tokens[0] != "/" ) {
+            std::deque<std::string> localhost = split( tokens[0], "@" );
+            if( localhost.size() > 1 ) {
+                std::deque<std::string> userpass = split( localhost[0], ":" );
+                map["user"] = userpass[0];
+                map["pass"] = userpass.size() > 1 ? userpass[2] : std::string();
+
+                std::deque<std::string> hostport = split( localhost[2], ":" );
+                map["host"] = hostport[0];
+                map["port"] = hostport.size() > 1 ? hostport[2] : std::string();
+            } else {
+                std::deque<std::string> hostport = split( localhost[0], ":" );
+                map["host"] = hostport[0];
+                map["port"] = hostport.size() > 1 ? hostport[2] : std::string();
+            }
+
+            tokens.pop_front(); // user:pass@host:port
+        }
+
+        if( tokens.size() > 0 ) // /, ..., /, ..., [ /, ... ]
+            for( auto &token : tokens )
+                ( map["path"] = map["path"] ) += token;
+
+        if( map["port"].empty() )
+            map["port"] = "80";
+
+        if( map["path"].empty() )
+            map["path"] = "/";
+
+        return map;
+    }
+}
+
+uri resolve( const std::string &url )
+{
+    auto map = decompose(url);
+    auto   u = resolve( map["host"], map["port"] );
+
+    u.pretty.user = map["user"];
+    u.pretty.pass = map["pass"];
+    u.pretty.host = map["host"];
+    u.pretty.port = map["port"];
+    u.pretty.path = map["path"];
+    u.pretty.full = map["full"];
+
+    if( map["proto"].size() )
+        u.pretty.protocol = map["proto"];
+
+    return u;
+}
+
+std::string uri::print() const {
+    std::stringstream ss;
+
+#define $p(n) ss << #n << "=" << this->n << std::endl
+
+    $p(ok);
+
+    $p(pretty.full);
+    $p(pretty.path);
+    $p(pretty.url);
+    $p(pretty.protocol);
+    $p(pretty.hostname);
+    $p(pretty.address);
+    $p(pretty.user);
+    $p(pretty.pass);
+    $p(pretty.host);
+    $p(pretty.ip);
+    $p(pretty.port);
+
+    $p(inet.ip[0]);
+    $p(inet.ip[1]);
+    $p(inet.ip[2]);
+    $p(inet.ip[3]);
+    $p(inet.ip[4]);
+    $p(inet.ip[5]);
+    $p(inet.port);
+
+#undef $p
+
+    return ss.str();
+}
+
+} // ::knot

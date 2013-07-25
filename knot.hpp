@@ -24,6 +24,30 @@ namespace knot
     size_t get_bytes_sent();
       void reset_counters();
 
+    // tools
+    struct uri
+    {
+        struct {
+            std::string url, protocol, hostname, address;
+            std::string user, pass, host, ip, port;
+            std::string full, path;
+        } pretty;
+
+        struct {
+            int ip[6];
+            int port;
+        } inet;
+
+        int ok;
+
+        std::string print() const;
+    };
+
     // tools, get ip (once connected)
     bool get_interface_address( int &sockfd, std::string &ip, std::string &port );
+
+    // tools, resolve ip/url
+    uri resolve( const std::string &url );
+    uri resolve( const std::string &addr, unsigned port );
+    uri resolve( const std::string &addr, const std::string &port );
 }
