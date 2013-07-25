@@ -567,7 +567,7 @@ namespace knot
                         ss >> client_addr_port;
 
                         if( settings::threaded )
-                            std::thread( *control->callback, control->master_fd, child_fd, client_addr_ip, client_addr_port ).detach();
+                            std::thread( std::bind( *control->callback, control->master_fd, child_fd, client_addr_ip, client_addr_port ) ).detach();
                         else
                             (*control->callback)( control->master_fd, child_fd, client_addr_ip, client_addr_port );
 
@@ -810,14 +810,12 @@ namespace
         std::string str;
         std::deque<std::string> tokens;
         for( auto &ch : input ) {
-            if( delimiters.find_first_of( ch ) == std::string::npos ) {
-                str += ch;
-            } else {
+            if( delimiters.find_first_of( ch ) != std::string::npos ) {
                 if( str.size() ) tokens.push_back( str ), str = "";
                 tokens.push_back( std::string() + ch );
-            }
+            } else str += ch;
         }
-        return str.empty() ? tokens : tokens.push_back( str ), tokens;
+        return str.empty() ? tokens : ( tokens.push_back( str ), tokens );
     }
 
     std::string left_of( const std::string &input, const std::string &substring ) {
@@ -867,9 +865,9 @@ namespace
             tokens.pop_front(); // user:pass@host:port
         }
 
-        if( tokens.size() > 0 ) // /, ..., /, ..., [ /, ... ]
-            for( auto &token : tokens )
-                ( map["path"] = map["path"] ) += token;
+        // path = sum of remaining tokens: /, ..., /, ..., [ /, ... ]
+        for( auto &token : tokens )
+            ( map["path"] = map["path"] ) += token;
 
         if( map["port"].empty() )
             map["port"] = "80";

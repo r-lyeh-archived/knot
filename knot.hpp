@@ -20,6 +20,9 @@ namespace knot
     // bool limit( ip/mask, instances_per_ip, downspeed, upspeed ); // @todo
 
     // stats
+    //size_t get_hits();     // @todo, number of requests
+    //size_t get_visitors(); // @todo, number of unique visitors (per IP)
+    //size_t get_watchers(); // @todo, sizeof set active connections filtered per IP
     size_t get_bytes_received();
     size_t get_bytes_sent();
       void reset_counters();
