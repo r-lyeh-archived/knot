@@ -55,7 +55,7 @@
 #   define ACCEPT(A,B,C)             ::accept((A),(B),(C))
 #   define CONNECT(A,B,C)            ::connect((A),(B),(C))
 #   define CLOSE(A)                  ::closesocket((A))
-#   define READ(A,B,C)               ::read((A),(B),(C))
+#   define READ(A,B,C)               ::recv((A),(B),(C),0)
 #   define RECV(A,B,C,D)             ::recv((A), (char *)(B), (C), (D))
 #   define SELECT(A,B,C,D,E)         ::select((A),(B),(C),(D),(E))
 #   define SEND(A,B,C,D)             ::send((A), (const char *)(B), (int)(C), (D))
