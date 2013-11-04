@@ -52,6 +52,8 @@
 
 #   pragma comment(lib,"ws2_32.lib")
 
+#   define INIT()                    do { static WSADATA wsa_data; static const int init = WSAStartup( MAKEWORD(2, 2), &wsa_data ); } while(0)
+//#   define SOCKET(A,B,C)             ::socket((A),(B),(C))
 #   define ACCEPT(A,B,C)             ::accept((A),(B),(C))
 #   define CONNECT(A,B,C)            ::connect((A),(B),(C))
 #   define CLOSE(A)                  ::closesocket((A))
@@ -112,6 +114,8 @@
 
 #   include <arpa/inet.h> //inet_addr
 
+#   define INIT()                    do {} while(0)
+//#   define SOCKET(A,B,C)             ::socket((A),(B),(C))
 #   define ACCEPT(A,B,C)             ::accept((A),(B),(C))
 #   define CONNECT(A,B,C)            ::connect((A),(B),(C))
 #   define CLOSE(A)                  ::close((A))
@@ -161,9 +165,7 @@ namespace knot
         $windows(
         struct initialize_winsock {
             initialize_winsock() {
-                WSADATA wsa_data;
-                int result = WSAStartup( MAKEWORD(2, 2), &wsa_data );
-                bool failed = ( result != 0 );
+            	INIT();
             }
         } startup;
         )
@@ -206,7 +208,7 @@ namespace knot
             // if  tv = {n,m}, then select() waits up to n.m seconds
             // if  tv = {0,0}, then select() does polling
             // if &tv =  NULL, then select() waits forever
-            int ret = ::select(sockfd+1, &fds, NULL, NULL, &tv);
+            int ret = SELECT(sockfd+1, &fds, NULL, NULL, &tv);
             return ( ret == -1 ? sockfd = -1, TCP_ERROR : ret == 0 ? TCP_TIMEOUT : TCP_OK );
         }
 
@@ -220,7 +222,7 @@ namespace knot
             // set up the struct timeval for the timeout
             timeval tv = as_timeval( timeout );
 
-            int ret = ::select(sockfd + 1, before_read ? &fds : NULL, after_write ? &fds : NULL, NULL, &tv);
+            int ret = SELECT(sockfd + 1, before_read ? &fds : NULL, after_write ? &fds : NULL, NULL, &tv);
             return ( ret == -1 ? sockfd = -1, TCP_ERROR : ret == 0 ? TCP_TIMEOUT : TCP_OK );
         }
     }
@@ -238,11 +240,11 @@ namespace knot
             FD_ZERO( &dummy );
             FD_SET( s, &dummy );
 
-            bool sucess = ( ::select(0, 0, 0, &dummy, &tv) == 0 );
-            closesocket(s);
+            bool sucess = ( SELECT(0, 0, 0, &dummy, &tv) == 0 );
+            CLOSE(s);
         })
         $welse({
-            int rv = ::select(0, 0, NULL, NULL, &tv);
+            int rv = SELECT(0, 0, NULL, NULL, &tv);
         })
     }
 
@@ -262,7 +264,7 @@ namespace knot
                 fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 
                 error = 0;
-                if ( (n = ::connect(sockfd, (struct sockaddr *) saptr, salen)) < 0) {
+                if ( (n = CONNECT(sockfd, (struct sockaddr *) saptr, salen)) < 0) {
 /*                  if (errno != EINPROGRESS)
 						fprintf(stdout, "n: %d, errno: %s\n", n, strerror(errno)); */
                     if (errno != EINPROGRESS)
@@ -279,7 +281,7 @@ namespace knot
                     wset = rset;
                     tval = as_timeval( timeout_sec );
 
-                    if ( (n = ::select(sockfd+1, &rset, &wset, NULL,
+                    if ( (n = SELECT(sockfd+1, &rset, &wset, NULL,
                                      timeout_sec > 0 ? &tval : NULL)) == 0) {
                         CLOSE(sockfd);      /* timeout */
                         errno = ETIMEDOUT;
@@ -376,7 +378,7 @@ namespace knot
 
             // todo timeout_sec -= dt.s()
 
-            bytes_sent = ::send( sockfd, out.c_str(), out.size(), 0 );
+            bytes_sent = SEND( sockfd, out.c_str(), out.size(), 0 );
 
             /*
             if error = EWOULDBLOCK {
@@ -416,7 +418,7 @@ namespace knot
         while( receiving )
         {
             if( timeout_sec > 0.0 )
-                if( select( sockfd, timeout_sec ) != TCP_OK )
+                if( SELECT( sockfd, timeout_sec ) != TCP_OK )
                     return false;    // error or timeout
 
             // todo timeout_sec -= dt.s()
@@ -428,7 +430,7 @@ namespace knot
             */
 
             std::string buffer( 4096, '\0' );
-            int bytes_received = ::recv( sockfd, &buffer[0], buffer.size(), 0 );
+            int bytes_received = RECV( sockfd, &buffer[0], buffer.size(), 0 );
 
             if( bytes_received < 0 )
                 return false;        // error or timeout
@@ -457,13 +459,13 @@ namespace knot
         while( receiving )
         {
             if( timeout_sec > 0.0 )
-                if( select( sockfd, timeout_sec ) != TCP_OK )
+                if( SELECT( sockfd, timeout_sec ) != TCP_OK )
                     return false;    // error or timeout
 
             // todo timeout_sec -= dt.s()
 
             std::string buffer( 4096, '\0' );
-            int bytes_received = ::recv( sockfd, &buffer[0], buffer.size(), 0 );
+            int bytes_received = RECV( sockfd, &buffer[0], buffer.size(), 0 );
 
             if( bytes_received < 0 )
                 return false;        // error or timeout
@@ -668,38 +670,12 @@ namespace knot
     }
 } // knot::
 
-#undef $no
-#undef $yes
-
-#undef $welse
-#undef $windows
-
-#undef SHUTDOWN_W
-#undef SHUTDOWN_R
-#undef SHUTDOWN
-#undef LISTEN
-#undef BIND
-
-#undef SETSOCKOPT
-#undef GETSOCKOPT
-#undef WRITE
-#undef SEND
-#undef SELECT
-#undef RECV
-#undef READ
-#undef CLOSE
-#undef CONNECT
-#undef ACCEPT
-
 
 namespace knot {
 
 uri resolve( const std::string &addr, unsigned port )
 {
-#   ifdef _WIN32
-        static WSADATA wsaData;
-        static const int initilized = WSAStartup(MAKEWORD(2, 2), &wsaData);
-#   endif
+    INIT();
 
     uri out;
 
@@ -930,3 +906,29 @@ std::string uri::print() const {
 }
 
 } // ::knot
+
+
+#undef $no
+#undef $yes
+
+#undef $welse
+#undef $windows
+
+#undef SHUTDOWN_W
+#undef SHUTDOWN_R
+#undef SHUTDOWN
+#undef LISTEN
+#undef BIND
+
+#undef SETSOCKOPT
+#undef GETSOCKOPT
+#undef WRITE
+#undef SEND
+#undef SELECT
+#undef RECV
+#undef READ
+#undef CLOSE
+#undef CONNECT
+#undef ACCEPT
+//#undef SOCKET
+#undef INIT
