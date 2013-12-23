@@ -1,6 +1,8 @@
 /* Knot is a lightweight and simple TCP network C++11 library with no dependencies.
  * Copyright (c) 2013 Mario 'rlyeh' Rodriguez
 
+ * URL encoder/decoder code is based on code by Fred Bulback.
+
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
  * in the Software without restriction, including without limitation the rights
@@ -46,7 +48,17 @@
 
 #   include <cassert>
 
-#   include <winsock2.h>
+#   ifndef _MSC_VER                    // MingW/GCC madness to get inet_pton() working
+#       include <w32api.h>
+#       undef WINVER
+#       undef _WIN32_WINDOWS
+#       undef _WIN32_WINNT
+#       define WINVER                  WindowsVista
+#       define _WIN32_WINDOWS          WindowsVista
+#       define _WIN32_WINNT            WindowsVista
+#   endif
+
+//#   include <winsock2.h>
 #   include <ws2tcpip.h>
 #   include <windows.h>
 
@@ -70,6 +82,8 @@
 #   define SHUTDOWN(A)               ::shutdown((A),2)
 #   define SHUTDOWN_R(A)             ::shutdown((A),0)
 #   define SHUTDOWN_W(A)             ::shutdown((A),1)
+
+#   define inet_pton InetPtonA
 
     namespace
     {
@@ -112,7 +126,7 @@
 #   include <netdb.h>
 #   include <unistd.h>    //close
 
-#   include <arpa/inet.h> //inet_addr
+#   include <arpa/inet.h> //inet_addr, inet_pton
 
 #   define INIT()                    do {} while(0)
 //#   define SOCKET(A,B,C)             ::socket((A),(B),(C))
@@ -122,7 +136,7 @@
 #   define READ(A,B,C)               ::read((A),(B),(C))
 #   define RECV(A,B,C,D)             ::recv((A), (void *)(B), (C), (D))
 #   define SELECT(A,B,C,D,E)         ::select((A),(B),(C),(D),(E))
-#   define SEND(A,B,C,D)             ::send((A), (const int8 *)(B), (C), (D))
+#   define SEND(A,B,C,D)             ::send((A), (const char *)(B), (C), (D))
 #   define WRITE(A,B,C)              ::write((A),(B),(C))
 #   define GETSOCKOPT(A,B,C,D,E)     ::getsockopt((int)(A),(int)(B),(int)(C),(      void *)(D),(socklen_t *)(E))
 #   define SETSOCKOPT(A,B,C,D,E)     ::setsockopt((int)(A),(int)(B),(int)(C),(const void *)(D),(int)(E))
@@ -401,6 +415,24 @@ namespace knot
         }
         while( out.size() > 0 );
 
+        //SHUTDOWN_W( sockfd );
+
+        return true;
+    }
+
+    bool close_r( int &sockfd ) {
+        if( sockfd < 0 )
+            return false;
+
+        SHUTDOWN_R( sockfd );
+
+        return true;
+    }
+
+    bool close_w( int &sockfd ) {
+        if( sockfd < 0 )
+            return false;
+
         SHUTDOWN_W( sockfd );
 
         return true;
@@ -418,7 +450,7 @@ namespace knot
         while( receiving )
         {
             if( timeout_sec > 0.0 )
-                if( SELECT( sockfd, timeout_sec ) != TCP_OK )
+                if( select( sockfd, timeout_sec ) != TCP_OK )
                     return false;    // error or timeout
 
             // todo timeout_sec -= dt.s()
@@ -459,7 +491,7 @@ namespace knot
         while( receiving )
         {
             if( timeout_sec > 0.0 )
-                if( SELECT( sockfd, timeout_sec ) != TCP_OK )
+                if( select( sockfd, timeout_sec ) != TCP_OK )
                     return false;    // error or timeout
 
             // todo timeout_sec -= dt.s()
@@ -670,10 +702,56 @@ namespace knot
     }
 } // knot::
 
-
 namespace knot {
 
-uri resolve( const std::string &addr, unsigned port )
+std::string encode( const std::string &str ) {
+    auto to_hex = [](char code) -> char {
+      static char hex[] = "0123456789abcdef";
+      return hex[code & 15];
+    };
+
+    std::string out( str.size() * 3, '\0' );
+    const char *pstr = str.c_str();
+    char *buf = &out[0], *pbuf = buf;
+    while (*pstr) {
+        if (isalnum(*pstr) || *pstr == '-' || *pstr == '_' || *pstr == '.' || *pstr == '~')
+            *pbuf++ = *pstr;
+        else if (*pstr == ' ')
+            *pbuf++ = '+';
+        else
+            *pbuf++ = '%', *pbuf++ = to_hex(*pstr >> 4), *pbuf++ = to_hex(*pstr & 15);
+        pstr++;
+    }
+
+    return out.substr( 0, pbuf - buf );
+}
+
+std::string decode( const std::string &str ) {
+    auto from_hex = [](char ch) -> char {
+      return isdigit(ch) ? ch - '0' : tolower(ch) - 'a' + 10;
+    };
+
+    const char *pstr = str.c_str();
+    std::string out( str.size(), '\0' );
+    char *buf = &out[0], *pbuf = buf;
+    while (*pstr) {
+        if (*pstr == '%') {
+            if (pstr[1] && pstr[2]) {
+                *pbuf++ = from_hex(pstr[1]) << 4 | from_hex(pstr[2]);
+                pstr += 2;
+            }
+        } else if (*pstr == '+') {
+            *pbuf++ = ' ';
+        } else {
+            *pbuf++ = *pstr;
+        }
+        pstr++;
+    }
+
+    return out.substr( 0, pbuf - buf );
+}
+
+uri lookup( const std::string &addr, unsigned port )
 {
     INIT();
 
@@ -769,7 +847,7 @@ uri resolve( const std::string &addr, unsigned port )
     return out.ok = true, out;
 }
 
-uri resolve( const std::string &addr, const std::string &port )
+uri lookup( const std::string &addr, const std::string &port )
 {
     unsigned p;
     if( !(std::stringstream(port) >> p) ) {
@@ -777,7 +855,7 @@ uri resolve( const std::string &addr, const std::string &port )
         u.ok = false;
         return u;
     }
-    return resolve(addr,p);
+    return lookup(addr,p);
 }
 
 namespace
@@ -855,10 +933,10 @@ namespace
     }
 }
 
-uri resolve( const std::string &url )
+uri lookup( const std::string &url )
 {
     auto map = decompose(url);
-    auto   u = resolve( map["host"], map["port"] );
+    auto   u = lookup( map["host"], map["port"] );
 
     u.pretty.user = map["user"];
     u.pretty.pass = map["pass"];
@@ -904,7 +982,6 @@ std::string uri::print() const {
 
     return ss.str();
 }
-
 } // ::knot
 
 

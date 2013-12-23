@@ -44,6 +44,9 @@ int main( int argc, char **argv )
     if( !knot::send( client_socket, "Hello world" ) )
         die("client error: cant send");
 
+    if( !knot::close_w( client_socket ) )
+        die("client error: cant close write mode");
+
     if( !knot::receive( client_socket, answer ) )
         die("client error: cant receive");
 

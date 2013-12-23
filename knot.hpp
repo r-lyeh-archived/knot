@@ -10,6 +10,8 @@ namespace knot
     bool receive( int &sockfd, std::string &input, double timeout_secs = 600 );
     bool receive_www( int &sockfd, std::string &input, double timeout_secs = 600 );
     bool disconnect( int &sockfd, double timeout_secs = 600 );
+    bool close_r( int &sockfd );
+    bool close_w( int &sockfd );
     void sleep( double secs );
 
     // api, server side
@@ -50,7 +52,9 @@ namespace knot
     bool get_interface_address( int &sockfd, std::string &ip, std::string &port );
 
     // tools, resolve ip/url
-    uri resolve( const std::string &url );
-    uri resolve( const std::string &addr, unsigned port );
-    uri resolve( const std::string &addr, const std::string &port );
+    uri lookup( const std::string &url );
+    uri lookup( const std::string &addr, unsigned port );
+    uri lookup( const std::string &addr, const std::string &port );
+    std::string encode( const std::string &url );
+    std::string decode( const std::string &url );
 }

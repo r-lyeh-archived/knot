@@ -20,7 +20,9 @@ public API
 - `knot::get_bytes_received()` get number of bytes received since last reset.
 - `knot::get_bytes_sent()` get number of bytes received since last reset.
 - `knot::get_interface_address()` get address of current interface address (requires an established connection)
-- `knot::resolve()` get uri from url or host:port address.
+- `knot::lookup()` get uri from url or host:port address.
+- `knot::close_r()` disable read operations on socket.
+- `knot::close_w()` disable write operations on socket.
 
 sample
 ------
@@ -58,3 +60,4 @@ D:\prj\knot>
 special notes
 -------------
 - g++ users: both `-std=c++11` and `-lpthread` may be required when compiling `knot.cpp`
+- clang++ users: both `-std=c++11` and `-stdlib=libc++` may be required.
