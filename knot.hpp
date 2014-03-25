@@ -1,14 +1,31 @@
 #pragma once
 #include <string>
+#include <map>
 
 namespace knot
 {
+    // http request methods
+    enum method_mask : uint
+    {
+        RM_NONE = 0,
+        RM_GET = 1,
+        RM_POST = 1 << 1,
+        RM_HEAD = 1 << 2,
+        RM_PUT = 1 << 3,
+        RM_DELETE = 1 << 4,
+        RM_TRACE = 1 << 5,
+        RM_OPTIONS = 1 << 6,
+        RM_ALL = (uint) ~0,
+        RM_GETPOST = RM_GET | RM_POST,
+        RM_COMMON = RM_GETPOST | RM_HEAD | RM_PUT | RM_DELETE
+    };
     // api
     bool connect( int &sockfd, const std::string &ip, const std::string &port, double timeout_secs = 600 );
     bool is_connected( int &sockfd, double timeout_secs = 600 );
     bool send( int &sockfd, const std::string &output, double timeout_secs = 600 );
     bool receive( int &sockfd, std::string &input, double timeout_secs = 600 );
-    bool receive_www( int &sockfd, std::string &input, double timeout_secs = 600 );
+    bool receive_www( int &sockfd, std::string &input, double timeout_sec = 600, uint valid_method_mask=RM_ALL );
+    bool receive_www( int &sockfd, std::string &request_method, std::string &raw_location, std::string &input, std::string &data, std::map<std::string, std::string> &headers, double timeout_sec=600, uint valid_method_mask=RM_ALL);
     bool disconnect( int &sockfd, double timeout_secs = 600 );
     bool close_r( int &sockfd );
     bool close_w( int &sockfd );
