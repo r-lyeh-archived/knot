@@ -127,6 +127,7 @@
 #   include <unistd.h>    //close
 
 #   include <arpa/inet.h> //inet_addr, inet_pton
+#   include <netinet/tcp.h> // TCP_NODELAY 
 
 #   define INIT()                    do {} while(0)
 //#   define SOCKET(A,B,C)             ::socket((A),(B),(C))
@@ -428,7 +429,7 @@ namespace knot
         std::string out = output;
 
         int bytes_sent;
-
+	int flags=1;
         do
         {
             /*
@@ -438,7 +439,8 @@ namespace knot
             */
 
             // todo timeout_sec -= dt.s()
-
+	  // Probamos aqui
+          setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flags, sizeof(int));
             bytes_sent = SEND( sockfd, out.c_str(), out.size(), 0 );
 
             /*
