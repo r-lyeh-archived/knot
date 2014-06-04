@@ -559,7 +559,6 @@ namespace knot
                     return false;    // error or timeout
 
             // todo timeout_sec -= dt.s()
-
             std::string buffer( 4096, '\0' );
             int bytes_received = RECV( sockfd, &buffer[0], buffer.size(), 0 );
 
@@ -567,24 +566,6 @@ namespace knot
                 return false;        // error or timeout
 
             knot::bytes_recv += bytes_received;
-
-            // Get request type
-            if( request_method.empty() )
-            {
-                std::string::size_type space_pos;
-                request_method = buffer.substr( 0, ( ( space_pos = buffer.find( ' ' ) ) != std::string::npos )? space_pos : 0  );
-                // Test valid request type
-                if( !valid_method( request_method, valid_method_mask) )
-                {
-                    return false;
-                }
-                // Test protocol
-                if( buffer.substr( ( first_crlf = buffer.find(CRLF) ) - 8, 8) != "HTTP/1.1" )
-                    return false; // Bad protocol
-
-                // get location
-                raw_location = trim( buffer.substr(space_pos, first_crlf-8-space_pos) );
-            }
 
             if( content_length > -1 )
             {
@@ -596,6 +577,28 @@ namespace knot
 
             if( bytes_received == 0 )
                 return /*sockfd = -1,*/ true;   // ok! remote side closed connection
+
+            // Get request type
+            if( request_method.empty() )
+            {
+	      // Don't have enough information
+	      if (input.find(CRLF) == std::string::npos)
+		continue;
+
+                std::string::size_type space_pos;
+                request_method = input.substr( 0, ( ( space_pos = input.find( ' ' ) ) != std::string::npos )? space_pos : 0  );
+                // Test valid request type
+                if( !valid_method( request_method, valid_method_mask) )
+                {
+                    return false;
+                }
+                // Test protocol
+                if( input.substr( ( first_crlf = input.find(CRLF) ) - 8, 8) != "HTTP/1.1" )
+                    return false; // Bad protocol
+
+                // get location
+                raw_location = trim( input.substr(space_pos, first_crlf-8-space_pos) );
+            }
 
             // try to find the first CRLFCRLF which indicates the end of headers and
             // find out if we have payload, only if "Content-length" header is set.
