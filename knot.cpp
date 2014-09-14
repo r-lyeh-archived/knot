@@ -429,7 +429,7 @@ namespace knot
         std::string out = output;
 
         int bytes_sent;
-	int flags=1;
+	int flags=MSG_NOSIGNAL;
         do
         {
             /*
@@ -439,9 +439,7 @@ namespace knot
             */
 
             // todo timeout_sec -= dt.s()
-	  // Probamos aqui
-          setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *) &flags, sizeof(int));
-            bytes_sent = SEND( sockfd, out.c_str(), out.size(), 0 );
+            bytes_sent = SEND( sockfd, out.c_str(), out.size(), flags );
 
             /*
             if error = EWOULDBLOCK {
