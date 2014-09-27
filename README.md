@@ -4,7 +4,7 @@ knot
 - Knot is a lightweight and simple TCP network C++11 library with no dependencies.
 - Knot is tiny. One header and one source file.
 - Knot is cross-platform. Compiles under MSVC/GCC. Works on Windows/Linux.
-- Knot is MIT licensed.
+- Knot is BOOST licensed.
 
 public API
 ----------
