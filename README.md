@@ -1,4 +1,4 @@
-knot
+knot <a href="https://travis-ci.org/r-lyeh/knot"><img src="https://api.travis-ci.org/r-lyeh/knot.svg?branch=master" align="right" /></a>
 ====
 
 - Knot is a lightweight and simple TCP network C++11 library with no dependencies.
