@@ -6,26 +6,28 @@ knot <a href="https://travis-ci.org/r-lyeh/knot"><img src="https://api.travis-ci
 - Knot is cross-platform. Compiles under MSVC/GCC. Works on Windows/Linux.
 - Knot is zlib/libpng licensed.
 
-public API
-----------
-- `knot::connect()` connects to a network address.
-- `knot::send()` sends data bytes thru a connection.
-- `knot::receive()` receives data bytes from a connection.
-- `knot::receive()` receives data bytes from a http connection.
-- `knot::disconnect()` closes an established connection.
-- `knot::listen()` creates a listening thread.
-- `knot::shutdown()` shutdowns a listening thread.
-- `knot::sleep()` puts a thread to sleep.
-- `knot::reset_counters()` reset transmission stats.
-- `knot::get_bytes_received()` get number of bytes received since last reset.
-- `knot::get_bytes_sent()` get number of bytes received since last reset.
-- `knot::get_interface_address()` get address of current interface address (requires an established connection)
-- `knot::lookup()` get uri from url or host:port address.
-- `knot::close_r()` disable read operations on socket.
-- `knot::close_w()` disable write operations on socket.
+## Public API
+```c++
+namespace knot {
+  connect();               // connects to a network address.
+  send();                  // sends data bytes thru a connection.
+  receive();               // receives data bytes from a connection.
+  receive();               // receives data bytes from a http connection.
+  disconnect();            // closes an established connection.
+  listen();                // creates a listening thread.
+  shutdown();              // shutdowns a listening thread.
+  sleep();                 // puts a thread to sleep.
+  reset_counters();        // reset transmission stats.
+  get_bytes_received();    // get number of bytes received since last reset.
+  get_bytes_sent();        // get number of bytes received since last reset.
+  get_interface_address(); // get address of current interface address (requires an established connection)
+  lookup();                // get uri from url or host:port address.
+  close_r();               // disable read operations on socket.
+  close_w();               // disable write operations on socket.
+}
+```
 
-sample
-------
+## Sample
 ```c++
 #include <iostream>
 #include "knot.hpp"
@@ -47,8 +49,7 @@ int main( int argc, const char **argv )
 }
 ```
 
-possible output
----------------
+## Possible output
 ```
 D:\prj\knot>cl sample.client.ntp.cc knot.cpp
 D:\prj\knot>sample.client.ntp.exe
@@ -57,7 +58,10 @@ answer from NTP server:
 D:\prj\knot>
 ```
 
-special notes
--------------
+## Special notes
 - g++ users: both `-std=c++11` and `-lpthread` may be required when compiling `knot.cpp`
 - clang++ users: both `-std=c++11` and `-stdlib=libc++` may be required.
+
+## Changelog
+- v1.0.0 (2015/09/10) 
+  - Initial semantic versioning adherence

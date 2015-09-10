@@ -1,5 +1,5 @@
 /* Knot is a lightweight and simple TCP network C++11 library with no dependencies.
- * Copyright (c) 2013 Mario 'rlyeh' Rodriguez, zlib/libpng licensed
+ * - rlyeh, zlib/libpng licensed
 
  * URL encoder/decoder code is based on code by Fred Bulback.
 
@@ -109,6 +109,7 @@
 #   include <unistd.h>    //close
 
 #   include <arpa/inet.h> //inet_addr, inet_pton
+#   include <netinet/tcp.h> // TCP_NODELAY 
 
 #   define INIT()                    do {} while(0)
 //#   define SOCKET(A,B,C)             ::socket((A),(B),(C))
@@ -137,12 +138,14 @@
 #define $yes(...) __VA_ARGS__
 #define $no(...)
 
+#define CRLF "\r\n"
+
 #include "knot.hpp"
 
 namespace knot
 {
     enum settings {
-       threaded = true
+        threaded = true
     };
 
     namespace
@@ -161,7 +164,7 @@ namespace knot
         $windows(
         struct initialize_winsock {
             initialize_winsock() {
-            	INIT();
+                INIT();
             }
         } startup;
         )
@@ -171,6 +174,8 @@ namespace knot
     {
         size_t bytes_sent = 0;
         size_t bytes_recv = 0;
+        const std::string white_spaces( " \f\n\r\t\v" );
+        
 
         // common stuff
 
@@ -221,8 +226,51 @@ namespace knot
             int ret = SELECT(sockfd + 1, before_read ? &fds : NULL, after_write ? &fds : NULL, NULL, &tv);
             return ( ret == -1 ? sockfd = -1, TCP_ERROR : ret == 0 ? TCP_TIMEOUT : TCP_OK );
         }
-    }
 
+        bool valid_method(std::string &method, unsigned valid_mask)
+        {
+            if( method == "GET")
+                return valid_mask & RM_GET;
+            else if( method == "POST")
+                return valid_mask & RM_POST;
+            else if( method == "HEAD")
+                return valid_mask & RM_HEAD;
+            else if( method == "PUT")
+                return valid_mask & RM_PUT;
+            else if( method == "DELETE")
+                return valid_mask & RM_DELETE;
+            else if( method == "TRACE")
+                return valid_mask & RM_TRACE;
+            else if( method == "OPTIONS")
+                return valid_mask & RM_OPTIONS;
+            else
+                return 0;
+        }
+
+        std::string trim( std::string str, const std::string& trimChars = white_spaces )
+        {
+            std::string::size_type pos_end = str.find_last_not_of( trimChars );
+            std::string::size_type pos_start = str.find_first_not_of( trimChars );
+
+            return str.substr( pos_start, pos_end - pos_start + 1 );
+        }
+
+        void extract_headers( std::string input, std::map<std::string, std::string> &headers, int start)
+        {
+            std::string::size_type colon;
+            std::string::size_type crlf;
+
+            if ( ( colon = input.find(':', start) ) != std::string::npos && 
+                 ( ( crlf = input.find(CRLF, start) ) != std::string::npos ) )
+            {
+                headers.insert( std::pair<std::string, std::string>( trim( input.substr(start, colon - start) ),
+                                                                     trim( input.substr(colon+1, crlf - colon -1 ) ) )
+                                );
+
+                extract_headers(input, headers, crlf+2);
+            }
+        }
+    }
     // api
 
     void sleep( double seconds )
@@ -262,10 +310,10 @@ namespace knot
                 error = 0;
                 if ( (n = CONNECT(sockfd, (struct sockaddr *) saptr, salen)) < 0) {
 /*                  if (errno != EINPROGRESS)
-						fprintf(stdout, "n: %d, errno: %s\n", n, strerror(errno)); */
+                        fprintf(stdout, "n: %d, errno: %s\n", n, strerror(errno)); */
                     if (errno != EINPROGRESS)
                         return false;
-				}
+                }
 
                 /* Do whatever we want while the connect is taking place. */
 
@@ -363,7 +411,7 @@ namespace knot
         std::string out = output;
 
         int bytes_sent;
-
+        int flags = $windows(0) $welse( MSG_NOSIGNAL );
         do
         {
             /*
@@ -373,8 +421,7 @@ namespace knot
             */
 
             // todo timeout_sec -= dt.s()
-
-            bytes_sent = SEND( sockfd, out.c_str(), out.size(), 0 );
+            bytes_sent = SEND( sockfd, out.c_str(), out.size(), flags );
 
             /*
             if error = EWOULDBLOCK {
@@ -460,15 +507,30 @@ namespace knot
         return true;
     }
 
-    // similar to receive() but looks for '\r\n' terminator at end of while loop
-    bool receive_www( int &sockfd, std::string &input, double timeout_sec )
+    bool receive_www( int &sockfd, std::string &input, double timeout_sec, unsigned valid_method_mask )
+    {
+        std::string data;
+        std::string request;
+        std::map<std::string, std::string> headers;
+        std::string location;
+
+        return receive_www( sockfd, request, location, input, data, headers, timeout_sec, valid_method_mask );
+    }
+
+    // very simple implementation of RFC2616 (http://tools.ietf.org/html/rfc2616)
+    bool receive_www( int &sockfd, std::string &request_method, std::string &raw_location, std::string &input, std::string &data, std::map<std::string, std::string> &headers, double timeout_sec, unsigned valid_method_mask )
     {
         if( sockfd < 0 )
             return false;
 
         input = std::string();
+        data = std::string();
+        request_method = std::string();
 
         bool receiving = true;
+        int content_length = -1;
+        int payload_received = 0;
+        std::string::size_type first_crlf;
 
         while( receiving )
         {
@@ -477,7 +539,6 @@ namespace knot
                     return false;    // error or timeout
 
             // todo timeout_sec -= dt.s()
-
             std::string buffer( 4096, '\0' );
             int bytes_received = RECV( sockfd, &buffer[0], buffer.size(), 0 );
 
@@ -486,13 +547,63 @@ namespace knot
 
             knot::bytes_recv += bytes_received;
 
-            input += buffer.substr( 0, bytes_received );
+            if( content_length > -1 )
+            {
+                payload_received += bytes_received;
+                data += buffer.substr( 0, bytes_received );
+            }
+            else
+                input += buffer.substr( 0, bytes_received );
 
             if( bytes_received == 0 )
                 return /*sockfd = -1,*/ true;   // ok! remote side closed connection
 
-            if( input.substr( input.size() - 4 ) == "\r\n\r\n" )
+            // Get request type
+            if( request_method.empty() )
+            {
+          // Don't have enough information
+          if (input.find(CRLF) == std::string::npos)
+        continue;
+
+                std::string::size_type space_pos;
+                request_method = input.substr( 0, ( ( space_pos = input.find( ' ' ) ) != std::string::npos )? space_pos : 0  );
+                // Test valid request type
+                if( !valid_method( request_method, valid_method_mask) )
+                {
+                    return false;
+                }
+                // Test protocol
+                if( input.substr( ( first_crlf = input.find(CRLF) ) - 8, 8) != "HTTP/1.1" )
+                    return false; // Bad protocol
+
+                // get location
+                raw_location = trim( input.substr(space_pos, first_crlf-8-space_pos) );
+            }
+
+            // try to find the first CRLFCRLF which indicates the end of headers and
+            // find out if we have payload, only if "Content-length" header is set.
+            // it's possible to have payload without Content-length, but we won't have
+            // this case.
+            std::string::size_type crlf_2 = input.find("\r\n\r\n");
+            if( crlf_2 != std::string::npos && content_length == -1 )
+            {
+                extract_headers(input, headers, first_crlf+2);
+
+                if ( !headers["Content-Length"].empty() )
+                {
+                    content_length = atoi( headers["Content-Length"].c_str() );
+                    payload_received = input.length() - crlf_2;
+                    data = input.substr(crlf_2+4);
+                    input.erase(crlf_2);
+                }
+                else
+                    receiving = false;
+            }
+
+            if( content_length > -1 && payload_received >= content_length )
+            {
                 receiving = false;
+            }
         }
 
         return true;
